@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image:  yeadoh/admin-nginx:v-f1046b41
+        image:   yeadoh/admin-nginx:v-08f2004
         ports:
         - containerPort: 80
         resources:
@@ -41,7 +41,7 @@ spec:
     spec:
       containers:
       - name: fastapi
-        image:  yeadoh/admin-fastapi:v-f1046b41
+        image:   yeadoh/admin-fastapi:v-08f2004
         envFrom:
         - secretRef:
             name: fastapi-secrets
