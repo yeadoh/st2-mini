@@ -16,3 +16,6 @@ ENV/
 .DS_Store
 .vscode/
 .idea/
+
+# 키 제외
+*ed25519*

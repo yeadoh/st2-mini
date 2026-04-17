@@ -1,0 +1,82 @@
+name: Build 및 ECR 업로드
+
+on:
+  push:
+    branches: ["main"]
+
+# 동일한 워크플로우가 동시에 돌 때 충돌 방지 (새 작업시 이전 작업 인터루트로 취소)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # [수정] 레포지토리에 커밋을 푸시하기 위해 쓰기 권한을 명시합니다.
+    permissions:
+      contents: write
+    steps:
+      - name: 1. 깃허브 액션 스타트
+        uses: actions/checkout@v4
+        with:
+          # Git 로그를 모두 가져와야 push 시 충돌 에러를 줄여줍니다.
+          fetch-depth: 0
+      - name: 2. 도커 허브 로그인
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: 3. 빌드 및 push
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          FRONT_IMAGE: ${{ secrets.APP_IMAGE }}
+          APP_IMAGE: ${{ secrets.APP_IMAGE }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # 짧은 SHA 값 추출 (7자리)
+          echo "빌드 및 Push Tag: v$SHORT_SHA"
+          sed -i "s|$DOCKER_USERNAME/FRONT_IMAGE:v.*|"
+
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          # Docker Hub builds
+          docker build -t $DOCKER_USERNAME/$FRONT_IMAGE:v-$SHORT_SHA -f ./nginx/admin-nginx.Dockerfile ./nginx
+          docker build -t $DOCKER_USERNAME/$FRONT_IMAGE:latest -f ./nginx/admin-nginx.Dockerfile ./nginx
+
+          docker build -t $DOCKER_USERNAME/$APP_IMAGE:v-$SHORT_SHA -f ./fastapi/admin-fastapi.Dockerfile ./fastapi
+          docker build -t $DOCKER_USERNAME/$APP_IMAGE:latest -f ./fastapi/admin-fastapi.Dockerfile ./fastapi
+
+          docker push $DOCKER_USERNAME/$FRONT_IMAGE:v-$SHORT_SHA
+          docker push $DOCKER_USERNAME/$FRONT_IMAGE:latest
+          docker push $DOCKER_USERNAME/$APP_IMAGE:v-$SHORT_SHA
+          docker push $DOCKER_USERNAME/$APP_IMAGE:latest
+      - name: 4. Kubernetes Manifest 이미지 버전 자동 업데이트
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          FRONT_IMAGE: ${{ secrets.FRONT_IMAGE }}
+          APP_IMAGE: ${{ secrets.APP_IMAGE }}
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          
+          # board-alb.yaml 내의 이미지 태그를 새 버전으로 치환 (sed 활용)
+          sed -i "s|$DOCKER_USERNAME/$FRONT_IMAGE:v-.*| $DOCKER_USERNAME/$FRONT_IMAGE:v-$SHORT_SHA|g" k8s/02-nginx-fast-all-deploy.yaml
+          sed -i "s|$DOCKER_USERNAME/$APP_IMAGE:v-.*| $DOCKER_USERNAME/$APP_IMAGE:v-$SHORT_SHA|g" k8s/02-nginx-fast-all-deploy.yaml
+
+      - name: 5. 커밋 및 push 변경
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add k8s/02-nginx-fast-all-deploy.yaml
+
+          # 1. 먼저 스테이징된 변경사항이 있는지 확인
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            # 2. 변경사항이 있을 때만 SHORT_SHA와 함께 커밋 생성
+            SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+            git commit -m "Auto-deploy: update image tags to v-$SHORT_SHA [skip ci]"
+
+            # 3. 최신 상태 반영 후 푸시
+            git pull --rebase origin main
+            git push origin main
+          fi

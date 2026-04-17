@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: yeadoh/admin-nginx:v1
+        image: yeadoh/admin-nginx:v-1
         ports:
         - containerPort: 80
         resources:
@@ -41,7 +41,7 @@ spec:
     spec:
       containers:
       - name: fastapi
-        image: yeadoh/admin-fastapi:v1
+        image: yeadoh/admin-fastapi:v-1
         envFrom:
         - secretRef:
             name: fastapi-secrets
@@ -86,7 +86,12 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: st2-alb-ingress
-  annotations: # 주석: k8s가 알아보기 위한 주석
+  annotations:
+    # Ingress Grouping: 인그레스에 동일하게 설정하는 옵션 [AWS에서만 가능함]
+    alb.ingress.kubernetes.io/gruop.name: "st2-shared-alb"
+    # ALB 태그
+    alb.ingress.kubernetes.io/tags: Name=st2-eks-ALB
+
     # internet-facing: 외부 로드밸런서
     alb.ingress.kubernetes.io/scheme: internet-facing # ALB의 스킴을 인터넷으로 설정
     # ip: IP 주소를 대상으로 하는 타겟 그룹 생성
