@@ -30,7 +30,7 @@ jobs:
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-          FRONT_IMAGE: ${{ secrets.APP_IMAGE }}
+          FRONT_IMAGE: ${{ secrets.FRONT_IMAGE }}
           APP_IMAGE: ${{ secrets.APP_IMAGE }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
