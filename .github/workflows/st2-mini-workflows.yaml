@@ -35,10 +35,9 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           # 짧은 SHA 값 추출 (7자리)
-          echo "빌드 및 Push Tag: v$SHORT_SHA"
-          sed -i "s|$DOCKER_USERNAME/FRONT_IMAGE:v-*|"
-
           SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "빌드 및 Push Tag: v$SHORT_SHA"
+
           # Docker Hub builds
           docker build -t $DOCKER_USERNAME/$FRONT_IMAGE:v-$SHORT_SHA -f ./nginx/admin-nginx.Dockerfile ./nginx
           docker build -t $DOCKER_USERNAME/$FRONT_IMAGE:latest -f ./nginx/admin-nginx.Dockerfile ./nginx
