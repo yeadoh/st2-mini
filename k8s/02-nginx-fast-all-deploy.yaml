@@ -1,0 +1,159 @@
+# 1. Nginx Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: yeadoh/admin-nginx:v1
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "100m" # HPA 측정을 위한 필수 설정 (nginx, 100m~500m)
+          limits:
+            cpu: "250m" # requests의 2.5배 (nginx)
+---
+# 2. FastAPI Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fastapi
+  template:
+    metadata:
+      labels:
+        app: fastapi
+    spec:
+      containers:
+      - name: fastapi
+        image: yeadoh/admin-fastapi:v1
+        envFrom:
+        - secretRef:
+            name: fastapi-secrets
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: "200m" # HPA 를 위한 리소스 제한(fastapi)
+          limits:
+            cpu: "500m"
+---
+# 3. Nginx Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-svc
+spec:
+  selector:
+      app: nginx
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+---
+# 4. FastAPI Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-svc
+spec:
+  selector:
+    app: fastapi
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+# 5. LoadBalancer
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: st2-alb-ingress
+  annotations: # 주석: k8s가 알아보기 위한 주석
+    # internet-facing: 외부 로드밸런서
+    alb.ingress.kubernetes.io/scheme: internet-facing # ALB의 스킴을 인터넷으로 설정
+    # ip: IP 주소를 대상으로 하는 타겟 그룹 생성
+    alb.ingress.kubernetes.io/target-type: ip # ALB가 IP 주소를 대상으로 사용하도록 설정
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}, {"HTTPS": 443}]' # 리스너의 포트번호 
+    # ACM 인증서 ARN 입력
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:476293896981:certificate/ed76d015-85c8-48b8-864f-4d792ad7c7bc
+    # HTTP 접속 시 HTTPS로 자동 리다이렉트 (선택사항이지만 권장)
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # ALB에 보안그룹 지정 (ID입력, 여러개일 경우 쉼표로 구분)
+    alb.ingress.kubernetes.io/security-groups: sg-04a9bc02d4e32f190
+spec:
+  ingressClassName: alb # ALB 인그레스 컨트롤러가 이 INgress 리소스를 처리하도록 지정
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-svc # Ingress가 트래픽을 라우팅 할 서비스 이름
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-svc
+                port:
+                  number: 8000
+---
+# 6. Nginx HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+---
+# 7. FastAPI HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fastapi-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fastapi-deployment
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50

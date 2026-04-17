@@ -1,0 +1,18 @@
+# === 프로젝트 특정 폴더 제외 ===
+DB/
+eks-script/
+test/
+
+# === Python 관련 불필요한 파일 제외 ===
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+
+# === OS 및 에디터 관련 파일 ===
+.DS_Store
+.vscode/
+.idea/
